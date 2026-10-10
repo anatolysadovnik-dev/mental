@@ -11,3 +11,4 @@ anthropic>=0.39
 pytz
 pyjwt[crypto]>=2.8
 httpx[http2]
+apscheduler>=3.10,<4

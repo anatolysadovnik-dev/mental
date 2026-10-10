@@ -128,3 +128,44 @@ def send(db: Session, user_id: int, *, title: str, body: str,
     if stale:
         db.commit()
     return {"sent": sent, "failed": failed, "pruned": len(stale)}
+
+
+# слот → {язык: шаблон}; только ru/en написаны вручную, остальные языки падают на ru —
+# машинный перевод короткого пуша рискует звучать криво (см. bot/texts.py::_SLOT_NUDGE
+# для аналогичных телеграм-формулировок, они тоже только на ru).
+_SLOT_BODY = {
+    "ru": {
+        "morning": "Доброе утро! Сегодняшний день маршрута «{m}» ждёт вас.",
+        "afternoon": "Напоминание про задание дня в маршруте «{m}».",
+        "evening": "Вечер — время подвести день. Маршрут «{m}» ещё открыт.",
+    },
+    "en": {
+        "morning": "Good morning! Today's step in \"{m}\" is ready for you.",
+        "afternoon": "A gentle reminder about today's task in \"{m}\".",
+        "evening": "Evening check-in — \"{m}\" is still open for today.",
+    },
+}
+
+
+def _nudge_text(slot: str, module_name: str, language: str) -> tuple[str, str]:
+    body_map = _SLOT_BODY.get(language, _SLOT_BODY["ru"])
+    body = body_map.get(slot, body_map["evening"]).format(m=module_name)
+    return "Mental Club", body
+
+
+def send_due_reminders(db: Session) -> dict:
+    """Пуш-канал для `settings.due_reminders` — те же кандидаты, что видит бот, но
+    стемпится отдельно: по `user_id` (`mark_reminded_by_user`), а не по Telegram chat_id,
+    и только когда реально отправлено (`sent > 0`) — иначе кандидат остаётся и его ещё
+    может доставить бот, если аккаунт также привязан к Telegram."""
+    from app.services import settings as settings_svc     # локальный импорт — без цикла на уровне модуля
+
+    sent_total = 0
+    for item in settings_svc.due_reminders(db):
+        title, body = _nudge_text(item["slot"], item.get("module_name", ""),
+                                  item.get("language", "ru"))
+        result = send(db, item["user_id"], title=title, body=body, slot=item["slot"])
+        if result.get("sent", 0) > 0:
+            settings_svc.mark_reminded_by_user(db, item["user_id"], item["slot"])
+            sent_total += result["sent"]
+    return {"sent": sent_total}

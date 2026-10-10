@@ -2,18 +2,47 @@
 
 Бизнес-движки (day-progression, scoring/zone, интейк-роутер) — следующий слой (§7, §12).
 """
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import Body, Depends, FastAPI, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app import models as m
 from app.dependencies import current_user_id, is_internal, owned_enrollment, require_user_id
 from app.services import (intake as intake_svc, progression, postmodule, identity,
                           settings as settings_svc, finalproduct, audio as audio_svc, i18n,
                           auth as auth_svc, daysteps, linking, push, text_content as text_svc)
 
-app = FastAPI(title="Mental Club API", version="0.1.0")
+logger = logging.getLogger(__name__)
+
+
+def _push_reminders_tick() -> None:
+    """Раз в минуту: те же кандидаты, что у бота (`settings.due_reminders`), доставка —
+    APNs вместо Telegram (см. `push.send_due_reminders`). Бот сюда не лезет и не трогается."""
+    db = SessionLocal()
+    try:
+        push.send_due_reminders(db)
+    except Exception:                                   # noqa: BLE001 — тик не должен ронять процесс
+        logger.exception("push reminders tick упал")
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    sched = AsyncIOScheduler(timezone="UTC")
+    sched.add_job(_push_reminders_tick, "interval", minutes=1, id="ios_push_reminders",
+                 max_instances=1, coalesce=True)
+    sched.start()
+    yield
+    sched.shutdown(wait=False)
+
+
+app = FastAPI(title="Mental Club API", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -329,11 +358,24 @@ def enrollment_status(eid: int, uid: int | None = Depends(current_user_id),
     days_done = db.execute(
         select(func.count(m.DailyEntry.id)).where(m.DailyEntry.enrollment_id == eid)
     ).scalar_one()
+    # Названия недель — отдельное поле (а не внутри "weeks"), чтобы не трогать
+    # контракт "weeks" (бот его парсит как список ТОЛЬКО пройденных недель).
+    mod_weeks = db.execute(
+        select(m.ModuleWeek).where(m.ModuleWeek.module_code == e.module_code)
+        .order_by(m.ModuleWeek.n)
+    ).scalars().all()
+    week_titles = [
+        {"week": w.n, "title": i18n.overlay(db, m.ModuleWeekTranslation,
+                                            m.ModuleWeekTranslation.week_id, w.id,
+                                            language, w, ["title"])["title"]}
+        for w in mod_weeks
+    ]
     return {"module": e.module_code, "name": name,
             "status": e.status, "week": e.current_week, "day": e.current_day, "mode": e.mode,
             "total_weeks": 6, "total_days": 7, "days_completed": days_done,
             "days_total": 42, "started_at": e.started_at.isoformat() if e.started_at else None,
-            "weeks": [{"week": z.week_n, "zone": z.zone} for z in zones]}
+            "weeks": [{"week": z.week_n, "zone": z.zone} for z in zones],
+            "week_titles": week_titles}
 
 
 @app.post("/api/v1/journal/list")

@@ -70,9 +70,13 @@ def update_settings(db: Session, user_id: int, *, timezone: str | None = None,
 
 def due_reminders(db: Session) -> list[dict]:
     """Кандидаты на напоминание СЕЙЧАС (по слотам). НЕ стемпит — слот помечается отправленным
-    только после фактической доставки (`mark_reminded`). Пока не доставлено — кандидат
-    возвращается каждый тик, поэтому напоминание не теряется, даже если бот был недоступен.
-    Напоминания всегда включены (их нельзя отключить, можно менять только время)."""
+    только после фактической доставки (`mark_reminded`/`mark_reminded_by_user`). Пока не
+    доставлено — кандидат возвращается каждый тик, поэтому напоминание не теряется, даже если
+    канал был недоступен. Напоминания всегда включены (их нельзя отключить, можно менять время).
+
+    Канало-независимо: раньше требовался привязанный Telegram, теперь кандидат отдаётся
+    всегда (`provider_user_id` — `None`, если Telegram не привязан) — доставкой занимается
+    каждый канал сам (бот — по chat_id, APNs — по `user_id`, см. `push.send_due_reminders`)."""
     now_utc = datetime.now(pytz.utc)
     out: list[dict] = []
     users = db.execute(select(m.User)).scalars().all()
@@ -106,12 +110,10 @@ def due_reminders(db: Session) -> list[dict]:
             select(m.UserIdentity).where(m.UserIdentity.user_id == u.id,
                                          m.UserIdentity.provider == "telegram")
         ).scalars().first()
-        if not ident:
-            continue
+        language = i18n.resolve_language(u)
         mod = db.get(m.Module, enr.module_code)
         mod_name = enr.module_code
         if mod:
-            language = i18n.resolve_language(u)
             mod_name = i18n.overlay(db, m.ModuleTranslation, m.ModuleTranslation.module_code,
                                     mod.code, language, mod, ["name"])["name"]
         for slot, (h_attr, mi_attr, date_attr) in SLOTS.items():
@@ -122,15 +124,27 @@ def due_reminders(db: Session) -> list[dict]:
             # утро — только если день ещё не открыт; день/обед и вечер — пока день не закрыт
             if slot == "morning" and opened:
                 continue                                 # утро неактуально — не шлём (и не помечаем)
-            out.append({"provider_user_id": ident.provider_user_id, "slot": slot,
-                        "module_name": mod_name,
+            out.append({"user_id": u.id,
+                        "provider_user_id": ident.provider_user_id if ident else None,
+                        "slot": slot, "module_name": mod_name, "language": language,
                         "week": enr.current_week, "day": enr.current_day})
-    return out                                           # без стемпа — пометит mark_reminded
+    return out                                           # без стемпа — пометит mark_reminded*
+
+
+def _stamp(db: Session, user_id: int, slot: str) -> dict:
+    u = db.get(m.User, user_id)
+    if u is None:
+        return {"ok": False}
+    _, _, date_attr = SLOTS[slot]
+    local = datetime.now(pytz.utc).astimezone(_tz(u.timezone))
+    setattr(u, date_attr, local.date())
+    db.commit()
+    return {"ok": True}
 
 
 def mark_reminded(db: Session, provider_user_id: str | int, slot: str) -> dict:
-    """Пометить слот доставленным (стемпит last_*_date по локальной дате пользователя).
-    Вызывается ботом ПОСЛЕ фактической отправки — чтобы напоминание не терялось при сбое."""
+    """Пометить слот доставленным через Telegram (стемпит last_*_date). Вызывается ботом
+    ПОСЛЕ фактической отправки — чтобы напоминание не терялось при сбое."""
     if slot not in SLOTS:
         raise ValueError(f"неизвестный слот: {slot}")
     ident = db.execute(
@@ -139,9 +153,12 @@ def mark_reminded(db: Session, provider_user_id: str | int, slot: str) -> dict:
     ).scalars().first()
     if not ident:
         return {"ok": False}
-    u = db.get(m.User, ident.user_id)
-    _, _, date_attr = SLOTS[slot]
-    local = datetime.now(pytz.utc).astimezone(_tz(u.timezone))
-    setattr(u, date_attr, local.date())
-    db.commit()
-    return {"ok": True}
+    return _stamp(db, ident.user_id, slot)
+
+
+def mark_reminded_by_user(db: Session, user_id: int, slot: str) -> dict:
+    """То же, что `mark_reminded`, но для каналов, которые уже знают `user_id` напрямую
+    (APNs, см. `push.send_due_reminders`) — без поиска Telegram-привязки."""
+    if slot not in SLOTS:
+        raise ValueError(f"неизвестный слот: {slot}")
+    return _stamp(db, user_id, slot)
