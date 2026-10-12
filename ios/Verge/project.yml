@@ -29,6 +29,10 @@ configs:
 settings:
   base:
     SWIFT_VERSION: "5.0"
+    # Только iPhone: UI не адаптирован под iPad, а без этого App Store Connect
+    # требует iPad-иконки и все 4 ориентации (ландскейп в т.ч.) для multitasking.
+    TARGETED_DEVICE_FAMILY: "1"
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
 configFiles:
   Debug: Config/Debug.xcconfig
@@ -60,9 +64,15 @@ targets:
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        # Файл entitlements лежит в Resources и НЕ генерируется: aps-environment
-        # должен отличаться по конфигурациям, а XcodeGen этого не умеет.
+        # Файл entitlements лежит в Resources и НЕ генерируется. Debug использует
+        # development (симулятор/отладка на устройстве), Beta и Release — production
+        # (TestFlight и App Store подписывают production-сертификатом APNs).
         CODE_SIGN_ENTITLEMENTS: Resources/Verge.entitlements
+      configs:
+        Beta:
+          CODE_SIGN_ENTITLEMENTS: Resources/VergeRelease.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Resources/VergeRelease.entitlements
 
   VergeTests:
     type: bundle.unit-test

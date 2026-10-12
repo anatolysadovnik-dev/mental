@@ -16,7 +16,7 @@ struct AudioCard: View {
     @StateObject private var player = AudioPlayer()
 
     var body: some View {
-        PageCard {
+        AccentCard(accent: t.dustyBlue) {
             HStack(spacing: t.spacing.m) {
                 Button {
                     Haptics.light()
@@ -52,8 +52,6 @@ struct AudioCard: View {
                     .font(t.font.caption)
                     .foregroundStyle(t.inkDim)
             }
-
-            MarkPracticeButton(eid: eid, kind: "audio", code: code, title: title)
         }
         .task {
             await player.prepare(code: code, language: language.current.rawValue)

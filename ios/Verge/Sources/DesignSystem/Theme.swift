@@ -92,6 +92,10 @@ struct Theme: Sendable {
         var body: Font { .system(size: 15) }
         var bodyEmphasized: Font { .system(size: 15, weight: .medium) }
         var bodySerif: Font { .system(size: 15, design: .serif).italic() }
+        /// Текст карточек-чтения (фокус/задание дня и т.п.) — без italic, в паре с
+        /// `displaySerif` над ними: `body` рядом с serif-заголовком выглядел как два
+        /// случайных шрифта вперемешку.
+        var bodyReading: Font { .system(size: 16, design: .serif) }
 
         var caption: Font { .system(size: 13) }
         var labelS: Font { .system(size: 11, weight: .medium) }

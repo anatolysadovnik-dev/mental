@@ -370,6 +370,9 @@ struct EnrollmentStatusResponse: Codable, Sendable {
     let daysTotal: Int
     let startedAt: String?
     let weeks: [WeekZone]
+    /// Названия недель — отдельное поле от `weeks` (то содержит только пройденные
+    /// недели с зоной); нужно для «Пути», чтобы показать все недели маршрута.
+    let weekTitles: [WeekTitle]
 
     enum CodingKeys: String, CodingKey {
         case module, name, status, week, day, mode, weeks
@@ -378,6 +381,7 @@ struct EnrollmentStatusResponse: Codable, Sendable {
         case daysCompleted = "days_completed"
         case daysTotal = "days_total"
         case startedAt = "started_at"
+        case weekTitles = "week_titles"
     }
 
     init(from decoder: Decoder) throws {
@@ -394,12 +398,20 @@ struct EnrollmentStatusResponse: Codable, Sendable {
         daysTotal = try c.decodeIfPresent(Int.self, forKey: .daysTotal) ?? 42
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
         weeks = try c.decodeIfPresent([WeekZone].self, forKey: .weeks) ?? []
+        weekTitles = try c.decodeIfPresent([WeekTitle].self, forKey: .weekTitles) ?? []
     }
 }
 
 struct WeekZone: Codable, Identifiable, Sendable {
     let week: Int
     let zone: Zone
+
+    var id: Int { week }
+}
+
+struct WeekTitle: Codable, Identifiable, Sendable {
+    let week: Int
+    let title: String?
 
     var id: Int { week }
 }

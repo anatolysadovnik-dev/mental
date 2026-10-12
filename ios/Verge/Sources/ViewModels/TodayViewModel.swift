@@ -92,13 +92,31 @@ final class TodayViewModel: ObservableObject {
 
     private func apply(_ response: DayResponse) {
         day = response
-        // Вводный экран недели показывается один раз — в день 1 (как в боте)
-        showWeekIntro = response.day == 1 && response.weekIntro?.introScreen?.isEmpty == false
+        // Вводный экран недели — один раз за неделю, а не при каждой загрузке дня 1
+        // (бот отправляет это сообщением в чат, повтор там не мешает; шит — мешает).
+        if response.day == 1, response.weekIntro?.introScreen?.isEmpty == false,
+           let eid = enrollment?.enrollmentId, let week = response.week,
+           !hasSeenWeekIntro(eid: eid, week: week) {
+            showWeekIntro = true
+            markWeekIntroSeen(eid: eid, week: week)
+        }
         // подготовить пустые ответы под число вопросов рефлексии
         let promptCount = response.steps.filter { $0.kind == .freeText }.count
         if reflections.count != promptCount {
             reflections = Array(repeating: "", count: promptCount)
         }
+    }
+
+    private func hasSeenWeekIntro(eid: Int, week: Int) -> Bool {
+        UserDefaults.standard.bool(forKey: weekIntroSeenKey(eid: eid, week: week))
+    }
+
+    private func markWeekIntroSeen(eid: Int, week: Int) {
+        UserDefaults.standard.set(true, forKey: weekIntroSeenKey(eid: eid, week: week))
+    }
+
+    private func weekIntroSeenKey(eid: Int, week: Int) -> String {
+        "ridge_week_intro_seen_\(eid)_\(week)"
     }
 
     func refresh() async {

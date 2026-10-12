@@ -7,8 +7,8 @@
 	<array>
 		<string>Default</string>
 	</array>
-	<!-- APNs. Для сборки в App Store замените на production (или заведите
-	     отдельный файл entitlements для Release-конфигурации). -->
+	<!-- APNs sandbox — только для Debug (симулятор/отладка на устройстве).
+	     Beta и Release используют VergeRelease.entitlements (production), см. project.yml. -->
 	<key>aps-environment</key>
 	<string>development</string>
 </dict>

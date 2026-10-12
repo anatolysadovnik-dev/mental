@@ -96,7 +96,8 @@ struct DayFlowView: View {
                             text: task.text,
                             subtasks: task.subtasks,
                             accent: t.sage,
-                            icon: "checkmark.square")
+                            icon: "checkmark.square",
+                            textStyle: .system)
             }
 
             Text("today.taskQuestion")

@@ -49,61 +49,155 @@ struct PathView: View {
     // MARK: - Прогресс
 
     private func progressSection(_ status: EnrollmentStatusResponse) -> some View {
-        PageCard {
+        // Счётчик «1 из 42 дней» раньше был самым крупным элементом экрана — герой
+        // теперь полоса прогресса и название текущей недели, а счётчик —
+        // мелкая подпись снизу.
+        let currentTitle = status.weekTitles.first { $0.week == status.week }?.title
+        return PageCard {
             Text(status.name)
                 .font(t.font.displaySerif(20))
                 .foregroundStyle(t.ink)
 
+            if status.status == .active || status.status == .selfcheckDue {
+                VStack(alignment: .leading, spacing: 2) {
+                    LabelTag(text: L10n("today.weekDay").format(status.week, status.day), color: t.terracotta)
+                    if let currentTitle, !currentTitle.isEmpty {
+                        Text(currentTitle)
+                            .font(t.font.bodyEmphasized)
+                            .foregroundStyle(t.ink)
+                    }
+                }
+            }
+
             // total_weeks/total_days/days_total захардкожены в бэкенде (6/7/42) —
             // берём оттуда, а не считаем сами
-            HStack(alignment: .firstTextBaseline, spacing: t.spacing.xs) {
-                Text("\(status.daysCompleted)")
-                    .font(t.font.numericL)
-                    .foregroundStyle(t.terracotta)
-                Text(L10n("path.progress").format(status.daysCompleted, status.daysTotal))
-                    .font(t.font.caption)
-                    .foregroundStyle(t.inkMuted)
-            }
-            .accessibilityElement(children: .combine)
-
             ProgressView(value: Double(status.daysCompleted),
                          total: Double(max(status.daysTotal, 1)))
                 .tint(t.terracotta)
 
-            if status.status == .active || status.status == .selfcheckDue {
-                Text(L10n("today.weekDay").format(status.week, status.day))
-                    .font(t.font.caption)
-                    .foregroundStyle(t.inkDim)
-            }
+            Text(L10n("path.progress").format(status.daysCompleted, status.daysTotal))
+                .font(t.font.caption)
+                .foregroundStyle(t.inkMuted)
         }
     }
 
-    // MARK: - Зоны недель
+    // MARK: - Недели — вертикальная дорожка
 
+    /// Раньше здесь был ряд из шести одинаковых серых плашок без имён —
+    /// теперь у каждой недели есть название и понятное состояние
+    /// (пройдено/текущая/впереди), читается как карта пути, а не как ряд прямоугольников.
     private func weeksSection(_ status: EnrollmentStatusResponse) -> some View {
         VStack(alignment: .leading, spacing: t.spacing.m) {
             LabelTag(text: L10n("path.weeks").text, color: t.inkMuted)
 
-            // Визуальная шкала пройденного: по одной ячейке на неделю.
-            // Баллов нет — только зона, как и задумано (§16).
-            HStack(spacing: t.spacing.s) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(1...max(status.totalWeeks, 1), id: \.self) { week in
-                    let zone = status.weeks.first { $0.week == week }?.zone
-                    VStack(spacing: t.spacing.xs) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(zone.map { t.zoneColor($0) } ?? t.inkWhisper.opacity(0.4))
-                            .frame(height: 40)
-                        Text("\(week)")
-                            .font(t.font.labelS)
-                            .foregroundStyle(t.inkDim)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(Text(L10n("path.week").format(week)))
-                    .accessibilityValue(zone.map { Text(L10n($0.titleKey)) }
-                                        ?? Text("a11y.notSelected"))
+                    weekRow(week, status: status)
                 }
             }
         }
+    }
+
+    private enum WeekState {
+        case done(Zone?)
+        case current
+        case upcoming
+
+        var isCurrent: Bool { if case .current = self { return true }; return false }
+        var isUpcoming: Bool { if case .upcoming = self { return true }; return false }
+
+        var accessibilityValue: Text {
+            switch self {
+            case .done(let zone?): return Text(L10n(zone.titleKey))
+            case .done(nil): return Text("path.weekDone")
+            case .current: return Text("path.weekCurrent")
+            case .upcoming: return Text("a11y.notSelected")
+            }
+        }
+    }
+
+    private func state(for week: Int, status: EnrollmentStatusResponse) -> WeekState {
+        if let zone = status.weeks.first(where: { $0.week == week })?.zone {
+            return .done(zone)
+        }
+        if status.status == .completed {
+            return .done(nil)
+        }
+        if week == status.week, status.status == .active || status.status == .selfcheckDue {
+            return .current
+        }
+        return .upcoming
+    }
+
+    private func weekRow(_ week: Int, status: EnrollmentStatusResponse) -> some View {
+        let title = status.weekTitles.first { $0.week == week }?.title
+        let weekState = state(for: week, status: status)
+        let isLast = week == status.totalWeeks
+
+        return HStack(alignment: .top, spacing: t.spacing.m) {
+            VStack(spacing: 0) {
+                weekMarker(week, state: weekState)
+                if !isLast {
+                    Rectangle()
+                        .fill(isPast(weekState) ? t.terracotta.opacity(0.3) : t.inkWhisper.opacity(0.5))
+                        .frame(width: 2)
+                        .frame(minHeight: 24)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n("path.week").format(week))
+                    .font(t.font.labelS)
+                    .foregroundStyle(weekState.isCurrent ? t.terracotta : t.inkDim)
+                Text(title?.isEmpty == false ? title! : L10n("path.weekPlaceholder").text)
+                    .font(weekState.isCurrent ? t.font.bodyEmphasized : t.font.body)
+                    .foregroundStyle(weekState.isUpcoming ? t.inkMuted : t.ink)
+            }
+            .padding(.top, 3)
+
+            Spacer(minLength: 0)
+
+            if case .done(let zone?) = weekState {
+                Circle().fill(t.zoneColor(zone)).frame(width: 8, height: 8)
+                    .padding(.top, 10)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.bottom, isLast ? 0 : t.spacing.m)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(L10n("path.week").format(week)))
+        .accessibilityValue(weekState.accessibilityValue)
+    }
+
+    private func weekMarker(_ week: Int, state: WeekState) -> some View {
+        ZStack {
+            switch state {
+            case .done(let zone):
+                Circle().fill(zone.map { t.zoneColor($0) } ?? t.sage)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+            case .current:
+                Circle().fill(t.terracotta.opacity(0.14))
+                    .overlay(Circle().strokeBorder(t.terracotta, lineWidth: 1.5))
+                Text("\(week)")
+                    .font(t.font.labelS)
+                    .foregroundStyle(t.terracotta)
+            case .upcoming:
+                Circle().fill(t.surfaceSecondary)
+                    .overlay(Circle().strokeBorder(t.border, lineWidth: 0.5))
+                Text("\(week)")
+                    .font(t.font.labelS)
+                    .foregroundStyle(t.inkDim)
+            }
+        }
+        .frame(width: 28, height: 28)
+        .accessibilityHidden(true)
+    }
+
+    private func isPast(_ state: WeekState) -> Bool {
+        if case .done = state { return true }
+        return false
     }
 
     // MARK: - ИИ-разборы

@@ -17,32 +17,25 @@ struct TextCard: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        PageCard {
-            VStack(alignment: .leading, spacing: t.spacing.m) {
-                HStack {
-                    LabelTag(text: L10n("today.text").text, color: t.sage)
-                    Spacer()
-                    if isLoading {
-                        ProgressView().tint(t.terracotta)
-                    }
+        AccentCard(accent: t.sage) {
+            HStack {
+                LabelTag(text: L10n("today.text").text, color: t.sage)
+                Spacer()
+                if isLoading {
+                    ProgressView().tint(t.terracotta)
                 }
+            }
 
-                Text(title ?? code)
-                    .font(t.font.bodyEmphasized)
-                    .foregroundStyle(t.ink)
+            Text(title ?? code)
+                .font(t.font.bodyEmphasized)
+                .foregroundStyle(t.ink)
 
-                if let practiceBody {
-                    Text(practiceBody)
-                        .font(t.font.body)
-                        .foregroundStyle(t.inkMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if let errorMessage {
-                    Text(errorMessage)
-                        .font(t.font.caption)
-                        .foregroundStyle(t.inkDim)
-                }
-
-                MarkPracticeButton(eid: eid, kind: "text", code: code, title: title)
+            if let practiceBody {
+                ContentText(raw: practiceBody, accent: t.sage)
+            } else if let errorMessage {
+                Text(errorMessage)
+                    .font(t.font.caption)
+                    .foregroundStyle(t.inkDim)
             }
         }
         .task {
@@ -58,53 +51,6 @@ struct TextCard: View {
             practiceBody = resolved.body
         } catch {
             errorMessage = L10n("error.notFound").text
-        }
-    }
-}
-
-/// Кнопка «отметить пройденным» — общая для аудио и текста: оба пишут в дневник
-/// одним эндпоинтом (`POST /enrollments/{id}/practice-log`).
-struct MarkPracticeButton: View {
-    let eid: Int
-    /// "audio" | "text" — должно совпадать с `app.services.progression.log_practice`.
-    let kind: String
-    let code: String
-    let title: String?
-
-    @Environment(\.theme) private var t
-    @State private var isDone = false
-    @State private var isLogging = false
-
-    var body: some View {
-        Button {
-            Haptics.light()
-            Task { await log() }
-        } label: {
-            Label(isDone ? doneText : markText, systemImage: isDone ? "checkmark.circle.fill" : "circle")
-        }
-        .font(t.font.caption)
-        .foregroundStyle(isDone ? t.sage : t.terracotta)
-        .disabled(isDone || isLogging)
-    }
-
-    private var doneText: String {
-        kind == "audio" ? L10n("today.listened").text : L10n("today.textRead").text
-    }
-
-    private var markText: String {
-        kind == "audio" ? L10n("today.markListened").text : L10n("today.markRead").text
-    }
-
-    private func log() async {
-        guard !isDone, !isLogging else { return }
-        isLogging = true
-        defer { isLogging = false }
-        do {
-            try await RidgeAPI.shared.logPractice(eid: eid, kind: kind, code: code, title: title)
-            isDone = true
-            Haptics.success()
-        } catch {
-            Haptics.error()
         }
     }
 }

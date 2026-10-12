@@ -28,6 +28,14 @@ struct PageCard<Content: View>: View {
 
 /// Раскрывающаяся карточка с цветной полосой 3pt слева — образец `PlanItemCard` Rhythmos,
 /// самый переиспользуемый компонент оттуда. В Ridge на ней стоят фокус, задание и аудио.
+/// Шрифт основного текста карточки: `serif` — для «читательского» контента (фокус,
+/// рефлексия), `system` — для списков и задач, где засечки мешают быстро сканировать
+/// текст глазами (см. замечание о перегруженности курсивом в задачах).
+enum ContentTextStyle {
+    case serif
+    case system
+}
+
 struct ContentCard: View {
     let label: String
     let title: String?
@@ -36,6 +44,11 @@ struct ContentCard: View {
     var subtasks: [String] = []
     var accent: Color = Theme.warm.terracotta
     var icon: String?
+    /// Визуальный «герой» экрана (фокус дня, см. композицию `TodayView`) — крупнее
+    /// соседних карточек: это единственное место, где используется такое усиление,
+    /// чтобы на экране дня был один явный центр внимания, а не ряд одинаковых блоков.
+    var emphasized: Bool = false
+    var textStyle: ContentTextStyle = .serif
     /// `nil` — карточка не раскрывается (короткий текст показан целиком).
     var isExpanded: Bool?
     var onTap: (() -> Void)?
@@ -67,7 +80,7 @@ struct ContentCard: View {
         HStack(alignment: .top, spacing: t.spacing.m) {
             RoundedRectangle(cornerRadius: 1.5)
                 .fill(accent)
-                .frame(width: 3)
+                .frame(width: emphasized ? 4 : 3)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: t.spacing.s) {
@@ -90,19 +103,24 @@ struct ContentCard: View {
 
                 if let title, !title.isEmpty {
                     Text(title)
-                        .font(t.font.titleS)
+                        .font(emphasized ? t.font.titleM : t.font.titleS)
                         .foregroundStyle(t.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 if let text, !text.isEmpty {
-                    Text(text)
-                        .font(t.font.body)
-                        .foregroundStyle(t.inkMuted)
-                        .lineLimit(expanded ? nil : 3)
-                        .fixedSize(horizontal: false, vertical: expanded)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if expanded {
+                        ContentText(raw: text, accent: accent, font: bodyFont)
+                    } else {
+                        // Свёрнуто — эмодзи-маркеры не несут смысла в однострочном
+                        // превью, поэтому здесь просто очищенный текст, без блоков.
+                        Text(ContentFormatter.plainPreview(text))
+                            .font(bodyFont)
+                            .foregroundStyle(t.inkMuted)
+                            .lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
 
                 if expanded, !subtasks.isEmpty {
@@ -115,14 +133,56 @@ struct ContentCard: View {
                                     .padding(.top, 7)
                                     .accessibilityHidden(true)
                                 Text(item)
-                                    .font(t.font.body)
+                                    .font(bodyFont)
                                     .foregroundStyle(t.inkMuted)
                                     .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.trailing, 6)
                             }
                         }
                     }
                     .padding(.top, t.spacing.xs)
                 }
+            }
+        }
+        .padding(emphasized ? t.spacing.xl : t.spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(t.surface)
+        .clipShape(RoundedRectangle(cornerRadius: t.corners.card))
+        .overlay(
+            RoundedRectangle(cornerRadius: t.corners.card)
+                .strokeBorder(t.border, lineWidth: 0.5)
+        )
+        .animation(.spring(duration: 0.32, bounce: 0.12), value: expanded)
+    }
+
+    private var emphasizedFont: Font { .system(size: 18, design: .serif) }
+
+    private var bodyFont: Font {
+        if emphasized { return emphasizedFont }
+        return textStyle == .system ? t.font.body : t.font.bodyReading
+    }
+}
+
+// MARK: - AccentCard
+
+/// То же оформление, что у `ContentCard` (полоса-акцент + подложка), но без заголовка —
+/// для карточек с собственной внутренней композицией (плеер аудио, текстовая практика),
+/// чтобы вся «семья» карточек дня выглядела одним визуальным языком, а не вперемешку.
+struct AccentCard<Content: View>: View {
+    var accent: Color = Theme.warm.terracotta
+    @ViewBuilder var content: () -> Content
+
+    @Environment(\.theme) private var t
+
+    var body: some View {
+        HStack(alignment: .top, spacing: t.spacing.m) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(accent)
+                .frame(width: 3)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: t.spacing.m) {
+                content()
             }
         }
         .padding(t.spacing.l)
@@ -133,20 +193,19 @@ struct ContentCard: View {
             RoundedRectangle(cornerRadius: t.corners.card)
                 .strokeBorder(t.border, lineWidth: 0.5)
         )
-        .animation(.spring(duration: 0.32, bounce: 0.12), value: expanded)
     }
 }
 
 // MARK: - Hero
 
-/// Шапка экрана «Сегодня»: 200pt, градиент по времени суток, подпись-волна,
+/// Шапка экрана «Сегодня»: 152pt (компактно — заголовок дня живёт отдельно под шапкой),
+/// градиент по времени суток, подпись-волна,
 /// иконка времени суток справа-сверху и текстовый стек снизу-слева.
 /// Заменяет собой навбар (`.navigationBarHidden(true)`).
 struct HeroHeader: View {
     let dateLine: String
     let greeting: String
     let context: String?
-
     @Environment(\.theme) private var t
     @Environment(\.colorScheme) private var scheme
 
@@ -166,9 +225,9 @@ struct HeroHeader: View {
             Image(systemName: timeOfDay.symbol)
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(.white.opacity(0.85))
+                .accessibilityHidden(true)
                 .padding(t.spacing.xl)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: t.spacing.xs) {
                 Text(dateLine)
@@ -185,7 +244,7 @@ struct HeroHeader: View {
             }
             .padding(t.spacing.xl)
         }
-        .frame(height: 200)
+        .frame(height: 152)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
     }

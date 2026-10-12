@@ -9,6 +9,7 @@ struct MeView: View {
 
     @State private var showLinkSheet = false
     @State private var confirmChangeRoute = false
+    @State private var showModulePicker = false
 
     var body: some View {
         ZStack {
@@ -32,10 +33,22 @@ struct MeView: View {
         .navigationTitle(Text("me.title"))
         .task { await vm.load() }
         .sheet(isPresented: $showLinkSheet) { LinkCodeSheet() }
+        .sheet(isPresented: $showModulePicker) {
+            ModulePickerSheet(modules: vm.modules) { code in
+                showModulePicker = false
+                Task { await vm.enroll(in: code) }
+            }
+        }
         .alert(Text("me.changeRoute"), isPresented: $confirmChangeRoute) {
             Button("common.cancel", role: .cancel) {}
             Button("me.changeRoute", role: .destructive) {
-                Task { await vm.abandonActiveRoute() }
+                // паритет с ботом (route_switch_yes): сбросить прогресс и сразу же
+                // предложить выбрать новую программу, а не оставлять пустой экран.
+                Task {
+                    guard await vm.abandonActiveRoute() else { return }
+                    await vm.loadModules(language: language.current.rawValue)
+                    showModulePicker = true
+                }
             }
         } message: {
             Text("me.changeRouteWarning")
@@ -172,6 +185,7 @@ final class MeViewModel: ObservableObject {
     @Published var evening = DateComponents(hour: 20, minute: 0)
 
     @Published private(set) var activeEnrollment: EnrollmentSummary?
+    @Published private(set) var modules: [ModuleSummary] = []
     @Published private(set) var isSaving = false
     @Published var error: APIError?
 
@@ -212,9 +226,30 @@ final class MeViewModel: ObservableObject {
                                       timezone: nil, language: lang.rawValue)
     }
 
-    func abandonActiveRoute() async {
+    @discardableResult
+    func abandonActiveRoute() async -> Bool {
         do {
             try await api.abandonActive()
+            await load()
+            Haptics.success()
+            return true
+        } catch let e as APIError {
+            error = e
+            return false
+        } catch {
+            self.error = .server(status: 0, message: error.localizedDescription)
+            return false
+        }
+    }
+
+    func loadModules(language: String) async {
+        modules = (try? await api.modules(lang: language)) ?? []
+    }
+
+    /// Выбор новой программы сразу после сброса текущей (см. showModulePicker в MeView).
+    func enroll(in code: String) async {
+        do {
+            _ = try await api.enroll(moduleCode: code)
             await load()
             Haptics.success()
         } catch let e as APIError {

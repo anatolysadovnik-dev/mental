@@ -49,7 +49,7 @@ final class AuthViewModel: ObservableObject {
             let me = try await api.me()
             providers = me.providers
             isOffline = false
-            state = completedOnboarding ? .ready : .needsOnboarding
+            state = await resolveOnboardingState()
         } catch let error as APIError {
             if error.requiresSignOut {
                 signOutLocally()
@@ -63,6 +63,23 @@ final class AuthViewModel: ObservableObject {
             isOffline = true
             state = completedOnboarding ? .ready : .needsOnboarding
         }
+        if state == .ready {
+            await PushService.shared.ensureRegistered()
+            await PushService.shared.registerIfPossible()
+        }
+    }
+
+    /// Локальный флаг — не единственный источник истины: переустановка, новое устройство
+    /// или привязка аккаунта, где программа уже начата (например, в боте), оставляют его
+    /// сброшенным. Сверяемся с бэкендом, чтобы не гонять по опросу того, кто уже идёт по курсу.
+    private func resolveOnboardingState() async -> AuthState {
+        if completedOnboarding { return .ready }
+        if let enrollments = try? await api.enrollments(),
+           enrollments.contains(where: { $0.status == .active || $0.status == .selfcheckDue }) {
+            completedOnboarding = true
+            return .ready
+        }
+        return .needsOnboarding
     }
 
     func completeWelcome() {
@@ -122,7 +139,7 @@ final class AuthViewModel: ObservableObject {
             let me = try? await api.me()
             providers = me?.providers ?? []
             isOffline = false
-            state = completedOnboarding ? .ready : .needsOnboarding
+            state = await resolveOnboardingState()
         } catch let error as APIError {
             errorMessage = error.errorDescription
             #if DEBUG

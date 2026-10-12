@@ -57,6 +57,25 @@ final class PushService: ObservableObject {
             || settings.authorizationStatus == .provisional
     }
 
+    /// Вызывать при каждом запуске для уже вошедшего пользователя. `saveReminders()`
+    /// (онбординг) спрашивает разрешение только у НОВЫХ пользователей — у вернувшихся
+    /// после переустановки или второго устройства `ridge_completed_onboarding` сброшен,
+    /// но сервер уже знает об активном enrollment, и онбординг/запрос пушей пропускается
+    /// целиком (см. `AuthViewModel.resolveOnboardingState`). Без этого метода такие
+    /// пользователи никогда не увидят системный диалог разрешения.
+    func ensureRegistered() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            await requestAuthorization()
+        case .authorized, .provisional:
+            isAuthorized = true
+            UIApplication.shared.registerForRemoteNotifications()
+        default:
+            break
+        }
+    }
+
     /// Отправить токен на бэкенд. Тихо ничего не делает, если токена ещё нет или
     /// пользователь не авторизован — вызывается из нескольких мест и не должен шуметь.
     func registerIfPossible() async {
