@@ -150,7 +150,7 @@ _SLOT_BODY = {
 def _nudge_text(slot: str, module_name: str, language: str) -> tuple[str, str]:
     body_map = _SLOT_BODY.get(language, _SLOT_BODY["ru"])
     body = body_map.get(slot, body_map["evening"]).format(m=module_name)
-    return "Mental Club", body
+    return "Verge", body
 
 
 def send_due_reminders(db: Session) -> dict:
