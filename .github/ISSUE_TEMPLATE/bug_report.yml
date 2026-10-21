@@ -1,0 +1,26 @@
+name: Баг
+description: Что-то работает не так
+labels: [bug]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Где
+      options: [backend, bot, ios, content, infra, docs]
+    validations: {required: true}
+  - type: textarea
+    id: what
+    attributes:
+      label: Что происходит
+      description: Что ожидали и что получили. Скриншоты/логи приветствуются (без персональных данных).
+    validations: {required: true}
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes:
+      label: Версия / сборка / окружение
+      placeholder: "iOS build 2, iPhone 15, iOS 18.1 / prod / local"

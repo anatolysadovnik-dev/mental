@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults: {run: {working-directory: backend}}
+    env:
+      DATABASE_URL: sqlite:////tmp/ci.db
+      JWT_SECRET: ci-only-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt pytest
+      - name: Unit tests
+        run: python -m pytest tests -q
+      - name: Migrations + content + engines e2e
+        run: |
+          python -m alembic upgrade head
+          python -m scripts.load_content
+          python -m scripts.verify_engines
+
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: bot/requirements.txt
+      - run: pip install -r bot/requirements.txt
+      - name: Compile + import check
+        working-directory: bot
+        run: |
+          python -m compileall -q .
+          BOT_TOKEN=123456:ci python -c "import main"
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t verge-backend backend
+      - name: Build bot image
+        run: docker build -t verge-bot bot
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check conventional title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if ! echo "$TITLE" | grep -qE '^(feat|fix|chore|docs|refactor|test|ci|perf|content|ios|materials)(\([a-z0-9,_-]+\))?!?: .+'; then
+            echo "::error::Заголовок PR должен быть вида 'type(scope): описание', например 'feat(backend): ...'"
+            exit 1
+          fi

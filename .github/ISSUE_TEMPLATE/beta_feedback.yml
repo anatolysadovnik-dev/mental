@@ -1,0 +1,16 @@
+name: Отзыв бета-тестера
+description: Находка или пожелание из бета-тестирования
+labels: [beta-feedback]
+body:
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Что заметили
+    validations: {required: true}
+  - type: input
+    id: build
+    attributes:
+      label: Сборка и устройство
+  - type: markdown
+    attributes:
+      value: "Не указывайте здесь личные данные и содержимое дневника."

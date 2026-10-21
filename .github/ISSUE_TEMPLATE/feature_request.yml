@@ -1,0 +1,22 @@
+name: Задача / фича
+description: Новая функциональность или улучшение
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Где
+      options: [backend, bot, ios, content, infra, docs]
+    validations: {required: true}
+  - type: textarea
+    id: why
+    attributes:
+      label: Зачем
+      description: Какую проблему пользователя или команды решаем.
+    validations: {required: true}
+  - type: textarea
+    id: done
+    attributes:
+      label: Критерии готовности
+      placeholder: "- [ ] ..."
+    validations: {required: true}

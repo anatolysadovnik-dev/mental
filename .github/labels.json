@@ -1,0 +1,16 @@
+[
+  {"name":"bug","color":"d73a4a","description":"Что-то не работает"},
+  {"name":"enhancement","color":"a2eeef","description":"Новая функциональность"},
+  {"name":"beta-feedback","color":"fbca04","description":"Отзыв бета-тестера"},
+  {"name":"dependencies","color":"0366d6","description":"Обновление зависимостей"},
+  {"name":"backend","color":"1d76db","description":"FastAPI / БД"},
+  {"name":"bot","color":"5319e7","description":"Telegram-бот"},
+  {"name":"ios","color":"0e8a16","description":"iOS-приложение"},
+  {"name":"content","color":"c5def5","description":"Программы, тексты, аудио"},
+  {"name":"infra","color":"6f42c1","description":"Деплой, CI, Docker"},
+  {"name":"docs","color":"0075ca","description":"Документация"},
+  {"name":"P0","color":"b60205","description":"Блокер бета-релиза"},
+  {"name":"P1","color":"d93f0b","description":"Важно"},
+  {"name":"P2","color":"fbca04","description":"Обычный приоритет"},
+  {"name":"P3","color":"c2e0c6","description":"Когда дойдут руки"}
+]
