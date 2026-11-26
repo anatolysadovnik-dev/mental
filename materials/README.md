@@ -29,17 +29,16 @@ materials/
 
 ## Актуальные финальные программы
 
-Утверждённый комплект VERGE 2.0: [releases/2026-11-23/](releases/2026-11-23/) — десять финальных Markdown-программ.
+Источник для разработки — [RELEASE от 23 ноября 2026](releases/2026-11-23/) (10 программ). При расхождениях используйте утверждённый RELEASE.
 
 ```
 materials/programs/
 ├── anx/             Тревога                    → ANX-final.md
 ├── bound/           Личные границы             → BOUND-final.md
 ├── burn/            Выгорание                  → BURN-final.md
-├── focus/           Прокрастинация и избегание → FOCUS-final.md
+├── proc/            Прокрастинация и избегание → PROC-final.md
 ├── para/            Пара                       → PARA-final.md
 ├── pravo-byt/       Право быть                 → PRAVO-BYT-final.md
-├── proc/            Прокрастинация и избегание → PROC-final.md
 ├── real/            Найти себя и вернуть смысл → REAL-final.md
 ├── self/            Самооценка                 → SELF-final.md
 ├── svoya-zhizn/     Своя жизнь                 → SVOYA-ZHIZN-final.md
@@ -49,6 +48,8 @@ materials/programs/
 Каждая строка обозначает отдельную программу. В её папке лежит основной
 финальный Markdown-файл; если программа дополняется, новые материалы
 сохраняются рядом с ним и добавляются в её `README.md`.
+
+`focus/FOCUS-final.md` сохранён как предыдущая редакция прокрастинации; для релиза используйте `proc/PROC-final.md`.
 
 ## Присылаете материал впервые?
 
